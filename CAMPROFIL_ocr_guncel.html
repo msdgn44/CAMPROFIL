@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Akıllı Profil Kesim Asistanı</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--ink:#182230;--muted:#667085;--line:#e4e7ec;--blue:#175cd3;--green:#067647;--soft:#eef4ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+header{background:#142b4a;color:white;padding:24px max(18px,calc((100% - 1120px)/2))}
+header h1{margin:0 0 5px;font-size:24px}header p{margin:0;color:#d0d9e5}
+main{max-width:1120px;margin:22px auto;padding:0 16px 48px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:0 1px 2px #1018280a}
+h2{font-size:18px;margin:0 0 12px}.muted{color:var(--muted);font-size:13px}
+label{display:block;font-size:13px;font-weight:600;margin:0 0 5px}
+input,select,button{font:inherit}input,select{width:100%;padding:10px 11px;border:1px solid #cfd4dc;border-radius:9px;background:white;color:var(--ink)}
+button{border:0;border-radius:9px;padding:10px 14px;background:var(--blue);color:white;font-weight:650;cursor:pointer}
+button.secondary{background:#eef2f6;color:#344054}button.danger{background:#fff1f0;color:#b42318}
+.row{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.field{flex:1;min-width:130px}.small{width:110px;flex:0 0 110px}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-size:12px}
+.pill{display:inline-block;background:#ecfdf3;color:var(--green);border-radius:20px;padding:3px 9px;font-size:12px;font-weight:700}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.kpi{background:#f8fafc;padding:12px;border-radius:10px}.kpi strong{display:block;font-size:22px}.kpi span{font-size:12px;color:var(--muted)}
+.resultbar{margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:10px}
+.track{display:flex;height:18px;border-radius:5px;overflow:hidden;background:#eaecf0;margin:8px 0}.piece{background:#84adff;border-right:2px solid white}.waste{background:#d0d5dd;flex:1}
+.notice{background:#fffaeb;border:1px solid #fedf89;color:#93370d;padding:11px;border-radius:9px;font-size:13px}
+.hidden{display:none}.tag{font-size:12px;background:#f2f4f7;padding:3px 7px;border-radius:6px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}table{font-size:12px}th,td{padding:7px 4px}}
+@media print{header{background:white;color:black;padding:10px}header p{color:#333}button,.no-print{display:none!important}body{background:white}.card{box-shadow:none;break-inside:avoid}}
+</style>
+</head>
+<body>
+<header><h1>Akıllı Profil Kesim Asistanı</h1><p>Firma içi pilot sürüm · Çok pozlu proje · 5 mm testere payı</p></header>
+<main>
+<div class="grid">
+<section class="card">
+<h2>1. Proje bilgileri</h2>
+<div class="row">
+<div class="field"><label>Proje adı</label><input id="project" value="NYGARDS"></div>
+<div class="field"><label>Proje / sipariş no</label><input id="order" value="26-4553"></div>
+</div>
+<div class="row" style="margin-top:12px">
+<div class="field"><label>Poz sayısı (1–10)</label><select id="pozCount"></select></div>
+<div class="field"><label>Testere kesim payı (mm)</label><input id="kerf" type="number" min="0" value="5"></div>
+</div>
+<p class="muted">Pozlar ayrı izlenir; aynı profil ve aynı ölçüdeki parçalar proje genelinde ortak kesim havuzuna alınır.</p>
+</section>
+<section class="card">
+<h2>3. Manuel parça ekle (gerekirse)</h2>
+<div class="row">
+<div class="field"><label>Poz</label><select id="poz"></select></div>
+<div class="field"><label>Profil</label><select id="profile"></select></div>
+</div>
+<div class="row" style="margin-top:10px">
+<div class="field"><label>Çıta çeşidi</label><select id="variant"><option value="Tek Cam">Tek Cam</option><option value="Çift Cam">Çift Cam</option></select></div>
+<div class="field"><label>Kesim ölçüsü (mm)</label><input id="length" type="number" min="1" placeholder="Örn. 2485"></div>
+<div class="small"><label>Adet</label><input id="qty" type="number" min="1" value="1"></div>
+</div>
+<div class="row" style="margin-top:12px"><button id="add">Parçayı listeye ekle</button><span class="muted">Fotoğraf/PDF yükleme ve OCR üst bölümden yapılabilir; manuel giriş de kullanılabilir.</span></div>
+</section>
+</div>
+
+<section class="card" id="ocrCard">
+<h2>2. İmalat listesini fotoğraf / PDF olarak yükle</h2>
+<p class="muted">JPG, PNG veya PDF seçebilirsin. Dosyalar tarayıcıda okunur; yüklediğin belge bir sunucuya gönderilmez. Okunan satırları mutlaka kontrol et.</p>
+<div class="row">
+ <div class="field"><label>Fotoğraf veya PDF</label><input id="docFiles" type="file" accept="image/*,.pdf,application/pdf" multiple></div>
+ <button id="readDocs" type="button">Belgeyi oku</button>
+</div>
+<p class="muted" id="ocrStatus">Henüz belge seçilmedi.</p>
+<div id="ocrResults"></div>
+<div class="notice">Not: Tablo düzeni, fotoğraf kalitesi ve yazı tipine göre OCR hataları olabilir. İlk sürüm okunan metni ve tahmini satırları gösterir; onaylamadan kesim listesine eklemez.</div>
+</section>
+
+<section class="card">
+<div class="row" style="justify-content:space-between"><h2>4. Proje parça listesi</h2><button class="secondary no-print" id="clear">Listeyi temizle</button></div>
+<div style="overflow:auto"><table><thead><tr><th>Poz</th><th>Profil</th><th>Çeşit</th><th>Ölçü</th><th>Adet</th><th></th></tr></thead><tbody id="parts"></tbody></table></div>
+<p class="muted" id="empty">Henüz parça eklenmedi.</p>
+</section>
+<section class="card">
+<div class="row" style="justify-content:space-between;align-items:center"><div><h2>5. Kesim ve stok raporu</h2><p class="muted">Sistem her profil için uygun standart boyları karşılaştırır.</p></div><button id="calculate">Kesim planını hesapla</button></div>
+<div id="report"><p class="muted">Hesaplama için önce parça ekleyin.</p></div>
+</section>
+<section class="card">
+<h2>Profil kütüphanesi</h2>
+<div style="overflow:auto"><table><thead><tr><th>Profil</th><th>Stok boyları (mm)</th></tr></thead><tbody id="library"></tbody></table></div>
+</section>
+<div class="notice">Önemli: Bu ilk prototipte kesim yerleşimi sezgisel (best-fit) yöntemle yapılır; matematiksel küresel optimum garantisi vermez. Üretim/depo çıkışından önce kesim planını kontrol edin. Fotoğraftan otomatik okuma, kullanıcı onay ekranı ve kalıcı firma veritabanı henüz bağlı değildir.</div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+const profileNames=["Alt Ray Profil","Üst Ray Profil","Ray Aparat Profili","Dikme Profil","Dikme Karşılık Profil","Baza Profil","Kenet Profil Tırnak Profil","Kenet Profil","Çıta Profili"];
+function guessRows(text){
+ const lines=text.split(/\n+/).map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean);
+ const rows=[];
+ for(const line of lines){
+  const low=line.toLocaleLowerCase("tr-TR");
+  const profile=profileNames.find(n=>low.includes(n.toLocaleLowerCase("tr-TR")));
+  if(!profile) continue;
+  const nums=(line.match(/\d{2,5}(?:[.,]\d+)?/g)||[]).map(x=>Number(x.replace(",","."))).filter(Number.isFinite);
+  const lengths=nums.filter(n=>n>=100 && n<=8000);
+  if(!lengths.length) continue;
+  const len=Math.round(lengths[lengths.length-1]);
+  const qtyCandidate=nums.find(n=>Number.isInteger(n)&&n>=1&&n<=500&&n!==len);
+  const pozMatch=line.match(/poz(?:isyon)?\s*[:.-]?\s*0*(\d{1,3})/i);
+  rows.push({poz:pozMatch?Number(pozMatch[1]):1,profile,len,qty:qtyCandidate||1,variant:/çift\s*cam/i.test(line)?"Çift Cam": "Tek Cam",source:line});
+ }
+ return rows;
+}
+async function fileToImages(file){
+ if(file.type.startsWith("image/")) return [file];
+ if(file.type==="application/pdf" || file.name.toLowerCase().endsWith(".pdf")){
+  if(!window.pdfjsLib) throw new Error("PDF okuyucu yüklenemedi. İnternet bağlantısını kontrol et.");
+  pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise, imgs=[];
+  for(let i=1;i<=pdf.numPages;i++){const page=await pdf.getPage(i),vp=page.getViewport({scale:1.8}),canvas=document.createElement("canvas");canvas.width=vp.width;canvas.height=vp.height;await page.render({canvasContext:canvas.getContext("2d"),viewport:vp}).promise;imgs.push(await new Promise(r=>canvas.toBlob(r,"image/png")));}
+  return imgs;
+ }
+ throw new Error("Desteklenmeyen dosya: "+file.name);
+}
+document.getElementById("readDocs").addEventListener("click",async()=>{
+ const input=document.getElementById("docFiles"),status=document.getElementById("ocrStatus"),out=document.getElementById("ocrResults");
+ if(!input.files.length){alert("Önce fotoğraf veya PDF seç.");return}
+ if(!window.Tesseract){status.textContent="OCR motoru yüklenemedi. İnternet bağlantısını kontrol et.";return}
+ out.innerHTML="";let allText="";
+ try{
+  status.textContent="OCR motoru hazırlanıyor…";
+  const worker=await Tesseract.createWorker("tur+eng");
+  for(const file of input.files){
+   status.textContent=file.name+" okunuyor…";
+   const imgs=await fileToImages(file);
+   for(let i=0;i<imgs.length;i++){
+    const result=await worker.recognize(imgs[i]);allText+="\n"+result.data.text+"\n";
+   }
+  }
+  await worker.terminate();
+  const rows=guessRows(allText);
+  const raw=document.createElement("details");raw.innerHTML="<summary>OCR ile okunan ham metni göster</summary>";
+  const pre=document.createElement("pre");pre.style.whiteSpace="pre-wrap";pre.style.fontSize="12px";pre.textContent=allText;raw.append(pre);out.append(raw);
+  if(!rows.length){const msg=document.createElement("p");msg.className="notice";msg.textContent="Profil adı ve ölçüyü aynı satırda güvenilir biçimde eşleştiremedim. Ham metni kontrol et; bu belge düzeni için okuma kuralını geliştirmemiz gerekecek.";out.append(msg);}
+  rows.forEach((r)=>{
+   const box=document.createElement("div");box.className="resultbar";
+   box.innerHTML=`<div class="row"><div class="field"><label>Poz</label><input type="number" min="1" max="10" value="${r.poz}" data-k="poz"></div><div class="field"><label>Profil</label><select data-k="profile">${profileNames.map(n=>`<option ${n===r.profile?"selected":""}>${n}</option>`).join("")}</select></div><div class="field"><label>Ölçü (mm)</label><input type="number" value="${r.len}" data-k="len"></div><div class="field"><label>Adet</label><input type="number" min="1" value="${r.qty}" data-k="qty"></div></div><p class="muted">Belgeden okunan satır: ${r.source.replace(/</g,"&lt;")}</p><button type="button">Bu satırı listeye ekle</button>`;
+   box.querySelector("button").onclick=()=>{
+    const val=k=>box.querySelector(`[data-k="${k}"]`).value;
+    const poz=Number(val("poz")),profile=val("profile"),len=Number(val("len")),qty=Number(val("qty"));
+    if(poz<1||poz>10||!len||qty<1){alert("Poz, ölçü veya adet değerini kontrol et.");return}
+    items.push({id:++id,poz,profile,variant:profile==="Çıta Profili"?r.variant:"",len,qty});render();box.remove();
+   };
+   out.append(box);
+  });
+  status.textContent=`Okuma tamamlandı. ${rows.length} olası satır bulundu; kontrol edip tek tek listeye ekle.`;
+ }catch(e){status.textContent="Okuma hatası: "+e.message;}
+});
+</script>
+
+<script>
+const stock={
+"Alt Ray Profil":[4000,5000,6000,6800],
+"Üst Ray Profil":[4000,5000,6000,6800],
+"Ray Aparat Profili":[4000,5000,6000,6800],
+"Dikme Profil":[5000,6000],
+"Dikme Karşılık Profil":[5000,6000],
+"Baza Profil":[6800],
+"Kenet Profil":[6800],
+"Kenet Profil Tırnak Profil":[5000,6000],
+"Çıta Profili":[6800]
+};
+let items=[],id=0;
+const $=x=>document.getElementById(x);
+Object.keys(stock).forEach(n=>$('profile').add(new Option(n,n)));
+Object.entries(stock).forEach(([n,a])=>{let tr=document.createElement('tr');tr.innerHTML=`<td>${n}</td><td>${a.join(' / ')}</td>`;$('library').append(tr)});
+for(let i=1;i<=10;i++){$('pozCount').add(new Option(i,i));$('poz').add(new Option('Poz '+String(i).padStart(3,'0'),i))}
+$('pozCount').value=10;
+$('profile').addEventListener('change',()=>{$('variant').disabled=$('profile').value!=='Çıta Profili'});
+$('profile').dispatchEvent(new Event('change'));
+function render(){
+$('parts').innerHTML='';
+$('empty').classList.toggle('hidden',items.length>0);
+items.forEach(x=>{let tr=document.createElement('tr');tr.innerHTML=`<td>${String(x.poz).padStart(3,'0')}</td><td>${x.profile}</td><td>${x.profile==='Çıta Profili'?x.variant:'—'}</td><td>${x.len.toLocaleString('tr-TR')} mm</td><td>${x.qty}</td><td><button class="danger" data-id="${x.id}">Sil</button></td>`;$('parts').append(tr)});
+}
+$('add').onclick=()=>{
+let profile=$('profile').value, len=Number($('length').value),qty=Number($('qty').value),poz=Number($('poz').value);
+if(!len||len<1||!qty||qty<1){alert('Kesim ölçüsü ve adet pozitif olmalı.');return}
+items.push({id:++id,poz,profile,variant:profile==='Çıta Profili'?$ ('variant').value:'',len,qty});render();$('length').value='';$('qty').value=1;
+};
+$('parts').onclick=e=>{if(e.target.dataset.id){items=items.filter(x=>x.id!==Number(e.target.dataset.id));render()}};
+$('clear').onclick=()=>{if(confirm('Bütün parça satırları silinsin mi?')){items=[];render();$('report').innerHTML='<p class="muted">Liste temizlendi.</p>'}};
+$('pozCount').onchange=()=>{let max=Number($('pozCount').value);$('poz').innerHTML='';for(let i=1;i<=max;i++)$('poz').add(new Option('Poz '+String(i).padStart(3,'0'),i));};
+function pack(parts,kerf){
+ // Best-fit decreasing over all permitted stock lengths. Grouped by profile/variant.
+ let pieces=[];parts.forEach(p=>{for(let i=0;i<p.qty;i++)pieces.push({len:p.len,poz:p.poz,idx:p.id})});
+ pieces.sort((a,b)=>b.len-a.len);
+ let bins=[];
+ for(const piece of pieces){
+   let candidates=[];
+   bins.forEach((b,i)=>{let need=piece.len+(b.pieces.length?kerf:0);if(b.stock-b.used>=need)candidates.push({i,left:b.stock-b.used-need,existing:true})});
+   if(candidates.length){candidates.sort((a,b)=>a.left-b.left);let b=bins[candidates[0].i];let cut=piece.len+(b.pieces.length?kerf:0);b.used+=cut;b.pieces.push(piece);b.left=b.stock-b.used;}
+   else{
+     let options=parts._stock.filter(s=>s>=piece.len).sort((a,b)=>a-b);
+     if(!options.length)throw new Error(` ${piece.len} mm parça hiçbir standart boya sığmıyor.`);
+     let s=options[0];bins.push({stock:s,used:piece.len,pieces:[piece],left:s-piece.len});
+   }
+ }
+ return bins;
+}
+$('calculate').onclick=()=>{
+if(!items.length){alert('Önce parça ekleyin.');return}
+let kerf=Math.max(0,Number($('kerf').value)||0), groups={};
+items.forEach(p=>{let key=p.profile+(p.profile==='Çıta Profili'?' / '+p.variant:'');(groups[key]??=[]).push(p)});
+let html='',totalBars=0,totalStock=0,totalCut=0,totalWaste=0;
+try{
+for(const [name,arr] of Object.entries(groups)){
+ arr._stock=stock[arr[0].profile];
+ let bins=pack(arr,kerf);totalBars+=bins.length;
+ let st=bins.reduce((s,b)=>s+b.stock,0),cut=bins.reduce((s,b)=>s+b.pieces.reduce((t,p)=>t+p.len,0),0),w=bins.reduce((s,b)=>s+b.left,0);
+ totalStock+=st;totalCut+=cut;totalWaste+=w;
+ html+=`<div class="resultbar"><div class="row" style="justify-content:space-between"><strong>${name}</strong><span class="pill">${bins.length} boy</span></div>`;
+ bins.forEach((b,i)=>{
+ let desc=b.pieces.map(p=>`${p.len} mm (Poz ${String(p.poz).padStart(3,'0')})`).join(' + ');
+ let used=b.used, left=b.left;
+ html+=`<p style="margin:8px 0 2px"><strong>${i+1}. boy · ${b.stock} mm</strong> <span class="tag">Kalan ${left} mm</span></p><div class="track">`;
+ b.pieces.forEach(p=>html+=`<div class="piece" title="${p.len} mm · Poz ${p.poz}" style="width:${p.len/b.stock*100}%"></div>`);
+ html+=`<div class="waste" style="flex:${Math.max(0,left)}"></div></div><div class="muted">${desc} · Kesim payı toplamı: ${Math.max(0,b.pieces.length-1)*kerf} mm</div>`;
+ });
+ html+=`<p class="muted">Toplam stok: ${st.toLocaleString('tr-TR')} mm · Net parça: ${cut.toLocaleString('tr-TR')} mm · Kalan: ${w.toLocaleString('tr-TR')} mm</p></div>`;
+}
+$('report').innerHTML=`<div class="kpis"><div class="kpi"><strong>${totalBars}</strong><span>Toplam stok boyu</span></div><div class="kpi"><strong>${(totalStock/1000).toLocaleString('tr-TR',{maximumFractionDigits:2})} m</strong><span>Alınacak / verilecek stok</span></div><div class="kpi"><strong>${totalWaste.toLocaleString('tr-TR')} mm</strong><span>Toplam kalan</span></div></div>${html}<div class="row no-print" style="margin-top:12px"><button onclick="window.print()">Raporu yazdır / PDF kaydet</button></div>`;
+}catch(e){$('report').innerHTML=`<div class="notice">Hesaplama yapılamadı: ${e.message}</div>`}
+};
+render();
+</script>
+</body></html>
