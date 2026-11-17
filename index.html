@@ -44,7 +44,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 <p class="muted">Pozlar ayrı izlenir; aynı profil ve aynı ölçüdeki parçalar proje genelinde ortak kesim havuzuna alınır.</p>
 </section>
 <section class="card">
-<h2>2. İmalat sayfası ekle</h2>
+<h2>3. Manuel parça ekle (gerekirse)</h2>
 <div class="row">
 <div class="field"><label>Poz</label><select id="poz"></select></div>
 <div class="field"><label>Profil</label><select id="profile"></select></div>
@@ -54,16 +54,29 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 <div class="field"><label>Kesim ölçüsü (mm)</label><input id="length" type="number" min="1" placeholder="Örn. 2485"></div>
 <div class="small"><label>Adet</label><input id="qty" type="number" min="1" value="1"></div>
 </div>
-<div class="row" style="margin-top:12px"><button id="add">Parçayı listeye ekle</button><span class="muted">Fotoğraf/PDF okuma sonraki entegrasyon aşamasıdır; bu sürümde veriler elle girilir.</span></div>
+<div class="row" style="margin-top:12px"><button id="add">Parçayı listeye ekle</button><span class="muted">Fotoğraf/PDF yükleme ve OCR üst bölümden yapılabilir; manuel giriş de kullanılabilir.</span></div>
 </section>
 </div>
+
+<section class="card" id="ocrCard">
+<h2>2. İmalat listesini fotoğraf / PDF olarak yükle</h2>
+<p class="muted">JPG, PNG veya PDF seçebilirsin. Dosyalar tarayıcıda okunur; yüklediğin belge bir sunucuya gönderilmez. Okunan satırları mutlaka kontrol et.</p>
+<div class="row">
+ <div class="field"><label>Fotoğraf veya PDF</label><input id="docFiles" type="file" accept="image/*,.pdf,application/pdf" multiple></div>
+ <button id="readDocs" type="button">Belgeyi oku</button>
+</div>
+<p class="muted" id="ocrStatus">Henüz belge seçilmedi.</p>
+<div id="ocrResults"></div>
+<div class="notice">Not: Tablo düzeni, fotoğraf kalitesi ve yazı tipine göre OCR hataları olabilir. İlk sürüm okunan metni ve tahmini satırları gösterir; onaylamadan kesim listesine eklemez.</div>
+</section>
+
 <section class="card">
-<div class="row" style="justify-content:space-between"><h2>3. Proje parça listesi</h2><button class="secondary no-print" id="clear">Listeyi temizle</button></div>
+<div class="row" style="justify-content:space-between"><h2>4. Proje parça listesi</h2><button class="secondary no-print" id="clear">Listeyi temizle</button></div>
 <div style="overflow:auto"><table><thead><tr><th>Poz</th><th>Profil</th><th>Çeşit</th><th>Ölçü</th><th>Adet</th><th></th></tr></thead><tbody id="parts"></tbody></table></div>
 <p class="muted" id="empty">Henüz parça eklenmedi.</p>
 </section>
 <section class="card">
-<div class="row" style="justify-content:space-between;align-items:center"><div><h2>4. Kesim ve stok raporu</h2><p class="muted">Sistem her profil için uygun standart boyları karşılaştırır.</p></div><button id="calculate">Kesim planını hesapla</button></div>
+<div class="row" style="justify-content:space-between;align-items:center"><div><h2>5. Kesim ve stok raporu</h2><p class="muted">Sistem her profil için uygun standart boyları karşılaştırır.</p></div><button id="calculate">Kesim planını hesapla</button></div>
 <div id="report"><p class="muted">Hesaplama için önce parça ekleyin.</p></div>
 </section>
 <section class="card">
@@ -72,6 +85,75 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;p
 </section>
 <div class="notice">Önemli: Bu ilk prototipte kesim yerleşimi sezgisel (best-fit) yöntemle yapılır; matematiksel küresel optimum garantisi vermez. Üretim/depo çıkışından önce kesim planını kontrol edin. Fotoğraftan otomatik okuma, kullanıcı onay ekranı ve kalıcı firma veritabanı henüz bağlı değildir.</div>
 </main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+const profileNames=["Alt Ray Profil","Üst Ray Profil","Ray Aparat Profili","Dikme Profil","Dikme Karşılık Profil","Baza Profil","Kenet Profil Tırnak Profil","Kenet Profil","Çıta Profili"];
+function guessRows(text){
+ const lines=text.split(/\n+/).map(x=>x.replace(/\s+/g," ").trim()).filter(Boolean);
+ const rows=[];
+ for(const line of lines){
+  const low=line.toLocaleLowerCase("tr-TR");
+  const profile=profileNames.find(n=>low.includes(n.toLocaleLowerCase("tr-TR")));
+  if(!profile) continue;
+  const nums=(line.match(/\d{2,5}(?:[.,]\d+)?/g)||[]).map(x=>Number(x.replace(",","."))).filter(Number.isFinite);
+  const lengths=nums.filter(n=>n>=100 && n<=8000);
+  if(!lengths.length) continue;
+  const len=Math.round(lengths[lengths.length-1]);
+  const qtyCandidate=nums.find(n=>Number.isInteger(n)&&n>=1&&n<=500&&n!==len);
+  const pozMatch=line.match(/poz(?:isyon)?\s*[:.-]?\s*0*(\d{1,3})/i);
+  rows.push({poz:pozMatch?Number(pozMatch[1]):1,profile,len,qty:qtyCandidate||1,variant:/çift\s*cam/i.test(line)?"Çift Cam": "Tek Cam",source:line});
+ }
+ return rows;
+}
+async function fileToImages(file){
+ if(file.type.startsWith("image/")) return [file];
+ if(file.type==="application/pdf" || file.name.toLowerCase().endsWith(".pdf")){
+  if(!window.pdfjsLib) throw new Error("PDF okuyucu yüklenemedi. İnternet bağlantısını kontrol et.");
+  pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise, imgs=[];
+  for(let i=1;i<=pdf.numPages;i++){const page=await pdf.getPage(i),vp=page.getViewport({scale:1.8}),canvas=document.createElement("canvas");canvas.width=vp.width;canvas.height=vp.height;await page.render({canvasContext:canvas.getContext("2d"),viewport:vp}).promise;imgs.push(await new Promise(r=>canvas.toBlob(r,"image/png")));}
+  return imgs;
+ }
+ throw new Error("Desteklenmeyen dosya: "+file.name);
+}
+document.getElementById("readDocs").addEventListener("click",async()=>{
+ const input=document.getElementById("docFiles"),status=document.getElementById("ocrStatus"),out=document.getElementById("ocrResults");
+ if(!input.files.length){alert("Önce fotoğraf veya PDF seç.");return}
+ if(!window.Tesseract){status.textContent="OCR motoru yüklenemedi. İnternet bağlantısını kontrol et.";return}
+ out.innerHTML="";let allText="";
+ try{
+  status.textContent="OCR motoru hazırlanıyor…";
+  const worker=await Tesseract.createWorker("tur+eng");
+  for(const file of input.files){
+   status.textContent=file.name+" okunuyor…";
+   const imgs=await fileToImages(file);
+   for(let i=0;i<imgs.length;i++){
+    const result=await worker.recognize(imgs[i]);allText+="\n"+result.data.text+"\n";
+   }
+  }
+  await worker.terminate();
+  const rows=guessRows(allText);
+  const raw=document.createElement("details");raw.innerHTML="<summary>OCR ile okunan ham metni göster</summary>";
+  const pre=document.createElement("pre");pre.style.whiteSpace="pre-wrap";pre.style.fontSize="12px";pre.textContent=allText;raw.append(pre);out.append(raw);
+  if(!rows.length){const msg=document.createElement("p");msg.className="notice";msg.textContent="Profil adı ve ölçüyü aynı satırda güvenilir biçimde eşleştiremedim. Ham metni kontrol et; bu belge düzeni için okuma kuralını geliştirmemiz gerekecek.";out.append(msg);}
+  rows.forEach((r)=>{
+   const box=document.createElement("div");box.className="resultbar";
+   box.innerHTML=`<div class="row"><div class="field"><label>Poz</label><input type="number" min="1" max="10" value="${r.poz}" data-k="poz"></div><div class="field"><label>Profil</label><select data-k="profile">${profileNames.map(n=>`<option ${n===r.profile?"selected":""}>${n}</option>`).join("")}</select></div><div class="field"><label>Ölçü (mm)</label><input type="number" value="${r.len}" data-k="len"></div><div class="field"><label>Adet</label><input type="number" min="1" value="${r.qty}" data-k="qty"></div></div><p class="muted">Belgeden okunan satır: ${r.source.replace(/</g,"&lt;")}</p><button type="button">Bu satırı listeye ekle</button>`;
+   box.querySelector("button").onclick=()=>{
+    const val=k=>box.querySelector(`[data-k="${k}"]`).value;
+    const poz=Number(val("poz")),profile=val("profile"),len=Number(val("len")),qty=Number(val("qty"));
+    if(poz<1||poz>10||!len||qty<1){alert("Poz, ölçü veya adet değerini kontrol et.");return}
+    items.push({id:++id,poz,profile,variant:profile==="Çıta Profili"?r.variant:"",len,qty});render();box.remove();
+   };
+   out.append(box);
+  });
+  status.textContent=`Okuma tamamlandı. ${rows.length} olası satır bulundu; kontrol edip tek tek listeye ekle.`;
+ }catch(e){status.textContent="Okuma hatası: "+e.message;}
+});
+</script>
+
 <script>
 const stock={
 "Alt Ray Profil":[4000,5000,6000,6800],
